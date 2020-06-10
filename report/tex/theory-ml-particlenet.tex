@@ -1,4 +1,5 @@
 \chapter{Jet Tagging via Particle Clouds}
+
 Representing Jets is a core component of ML on Jet Physics. In  
 \href{run:../papers/Jet\ Tagging\ via\ Particle\ Clouds.pdf}{this paper}, 
 they are represented by particle clouds, which considers Jet as an 
@@ -140,7 +141,7 @@ every algorithm developed for images is based on CNNs. There are two major reaso
 why they are so successful.
 
 \begin{definition}
-    cConvolution is a mathematical operation $*$, defined as :
+    Convolution is a mathematical operation $*$, defined as :
 
     \begin{equation*}
         (f*g)(t) \triangleq \int_{-\infty}^{\infty} f(\tau)g(t - \tau) d\tau
@@ -220,7 +221,7 @@ was the function used in the original paper. The EdgeConv operation thus is :
 \noindent An EdgeConv block is implemented according to the diagram given below :
 
 \begin{center}
-    \includegraphics[scale=0.3]{img/edge-conv.png}
+    \includegraphics[scale=0.3]{img/theory-ml-particlenet/edge-conv.png}
 \end{center}
 
 \noindent The hyperparameters of the EdgeConv operation are the number of 
@@ -231,7 +232,7 @@ As this operation preserves the dataset as a point cloud, they
 can be stacked just as easily as standard convolutions.
 
 \begin{note}
-    mMultilayer Perceptron is a class of feedforward ANNs. The term, though is 
+    Multilayer Perceptron is a class of feedforward ANNs. The term, though is 
     used ambiguously to classify any feedforward ANN.
 \end{note}
 
@@ -251,7 +252,7 @@ suit better.
 The ParticleNet algorithm is given in the diagram given below :
 
 \begin{center}
-    \includegraphics[scale=0.25]{img/particle-net.png}
+    \includegraphics[scale=0.25]{img/theory-ml-particlenet/particle-net.png}
 \end{center}
 
 \noindent These are the two implementations of ParticleNet which were used 

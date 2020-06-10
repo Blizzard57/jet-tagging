@@ -1,0 +1,16 @@
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+
+# LaTeX
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.sunctex.gz
+*.toc
+*.xdv
