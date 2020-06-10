@@ -11,6 +11,8 @@ __pycache__/
 *.fls
 *.log
 *.out
-*.sunctex.gz
+*.bbl
+*.blg
+*.synctex.gz
 *.toc
 *.xdv
