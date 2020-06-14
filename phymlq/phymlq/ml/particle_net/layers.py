@@ -60,12 +60,12 @@ class MaskOut(tf.keras.layers.Layer):
 
     def call(self, inputs):
         data, mask = inputs
+        mask = tf.cast(tf.not_equal(mask, 0), dtype='float32')  # make valid positions to 1
 
         if self.outside:
             shift = tf.multiply(999., tf.cast(tf.equal(mask, 0), dtype='float32'))  # make non-valid positions to 999
             return tf.add(shift, data)
         else:
-            mask = tf.cast(tf.not_equal(mask, 0), dtype='float32')  # make valid positions to 1
             return tf.multiply(data, mask)
 
 
@@ -79,7 +79,7 @@ class PoolingLayer(tf.keras.layers.Layer):
         return {'axis': self.axis}
 
     def call(self, inputs):
-        if self.pool_type == 'mean':
+        if self.type == 'mean':
             return tf.reduce_mean(inputs, axis=self.axis)
         else:
             return tf.reduce_max(inputs, axis=self.axis)
@@ -89,7 +89,7 @@ class EdgeConvolution(tf.keras.layers.Layer):
 
     def __init__(self, num_points, k, channels, with_bn: bool = True, 
                  activation='relu', pooling='average', name=None):
-        super(EdgeConvolution, self).__init__(name)
+        super(EdgeConvolution, self).__init__(name=name)
         self.num_points = num_points
         self.k = k
         self.channels = channels

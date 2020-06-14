@@ -8,7 +8,7 @@ import awkward
 import uproot_methods
 
 
-class TopTaggingDataPreprocessor(object):
+class TopTaggingPreprocessor(object):
 
     @staticmethod
     def download_dataset(store_directory):

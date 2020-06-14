@@ -1,4 +1,4 @@
-import mlphile as ml
+import phymlq
 import numpy as np
 
 dataset = {
@@ -8,4 +8,4 @@ dataset = {
 }
 input_shapes = {k : dataset[k].shape[1:] for k in dataset}
 
-ml.models.particle_net.models.ParticleNet(input_shapes, 2)
+phymlq.ml.particle_net.models.ParticleNet(input_shapes, 2)

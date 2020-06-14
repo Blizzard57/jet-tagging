@@ -1,11 +1,14 @@
 import tensorflow as tf
 
-from mlphile.models.particle_net.layers import EdgeConvolution
+from phymlq.ml.particle_net.layers import EdgeConvolution, PoolingLayer, MaskOut
 
 
 class ParticleNet():
 
-    def __init__(self, input_shapes, num_classes, model_type='particlenet-lite'):
+    def __init__(self, 
+                 input_shapes={'points': (100, 2), 'features': (100, 4), 'mask': (100, 1)}, 
+                 num_classes=2, 
+                 model_type='particlenet-lite'):
         """
         Make the ParticleNet model
 
@@ -20,7 +23,7 @@ class ParticleNet():
 
         Example
         -------
-        >>> ParticleNet(2, {'points': (100, 2), 'features': (100, 4), 'mask': (100, 1)})
+        >>> ParticleNet({'points': (100, 2), 'features': (100, 4), 'mask': (100, 1)}, 2)
         """
         assert model_type in ['particlenet-lite', 'particlenet-full'], 'Model Name not in list.'
 
@@ -88,31 +91,12 @@ class ParticleNet():
 
         with tf.name_scope('particle_net'):
 
-            # If explicit features are not passed, then the features are the points
-            if self.layer_features is None:
-                self.layer_features = self.layer_points
+            fts = tf.keras.layers.BatchNormalization(name='features_batchnormalize')(self.layer_features)
 
-            # Makes a boolean mask out of the input mask, 1 if it's valid (in the mask), 999 if it's not.
-            # Represents a padding particle or Transverse momentum is 1
-            # TODO: Find out if an why Transverse Momentum = 1 needs to be checked.
-            if self.layer_mask is not None:
-                # make valid positions to 1
-                mask = tf.cast(tf.not_equal(self.layer_mask, 0), dtype='float32')
-                # make non-valid positions to 999
-                coord_shift = tf.multiply(999., tf.cast(tf.equal(self.layer_mask, 0), dtype='float32'))
-            else:
-                raise NotImplementedError('Implement an allow-all mask')
-
-            fts = tf.keras.layers.BatchNormalization(name='fts_bn')(self.layer_features)
-
-            # Extracting CONV Parameters (K, (C1, C2, C3)) from the settings we passed in
             for layer_idx, layer_param in enumerate(self.settings['conv_params']):
                 K, channels = layer_param
-                # Masked out points get a (+999, +999) - coordinate shift on the 
-                # eta-phi plane, after each layer
-                pts = tf.add(coord_shift, self.layer_points) if layer_idx == 0 else tf.add(coord_shift, fts)
-                # Now we repeat edge-conv over all layers starting with (Points, Features) and
-                # then the next layers are (Previous Layer masked, Previous Layer)
+                pts = MaskOut(True, name='mask_%d'%(layer_idx))(
+                    [self.layer_points if layer_idx == 0 else fts, self.layer_mask])
                 fts = EdgeConvolution(
                     self.settings['num_points'], 
                     K,
@@ -123,24 +107,17 @@ class ParticleNet():
                     name='%s_%d' % ('edge_conv', layer_idx)
                 )([pts, fts])
 
-            # Filter out the masked out particles to 0
-            if mask is not None:
-                fts = tf.multiply(fts, mask)
+            if self.layer_mask is not None:
+                fts = MaskOut(False, name='mask_f')([fts, self.layer_mask])
+            x = PoolingLayer(axis=1, pool_type='mean', name='average_pool')(fts)
 
-            # Output shape: (N, C) - Takes the average of all the particles in the jet
-            pool = tf.reduce_mean(fts, axis=1)  
-
-            # Extracting CONV Parameters (Units, Dropout) from the settings we passed in
             if self.settings['fc_params'] is not None:
-                x = pool
                 for layer_idx, layer_param in enumerate(self.settings['fc_params']):
                     units, drop_rate = layer_param
-                    # Add the Dense and Dropout layers
                     x = tf.keras.layers.Dense(units, activation='relu')(x)
                     if drop_rate is not None and drop_rate > 0:
                         x = tf.keras.layers.Dropout(drop_rate)(x)
-                # Final Classification layer
-                out = tf.keras.layers.Dense(self.settings['num_class'], activation='softmax')(x)
-                return out  # (N, num_classes)
+                x = tf.keras.layers.Dense(self.settings['num_class'], activation='softmax')(x)
+                return x  # (N, num_classes)
             else:
-                return pool
+                return x
