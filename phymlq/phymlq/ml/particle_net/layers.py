@@ -2,8 +2,8 @@ import tensorflow as tf
 
 
 class KNeighborSelect(tf.keras.layers.Layer):
-    def __init__(self, k, num_points, name=None):
-        super(KNeighborSelect, self).__init__(name=name)
+    def __init__(self, k, num_points, **kwargs):
+        super(KNeighborSelect, self).__init__(**kwargs)
         self.k = k
         self.n = num_points
 
@@ -51,8 +51,8 @@ class KNeighborSelect(tf.keras.layers.Layer):
 
 
 class MaskOut(tf.keras.layers.Layer):
-    def __init__(self, outside, name=None):
-        super(MaskOut, self).__init__(name=name)
+    def __init__(self, outside, **kwargs):
+        super(MaskOut, self).__init__(**kwargs)
         self.outside = outside
 
     def get_config(self):
@@ -70,8 +70,8 @@ class MaskOut(tf.keras.layers.Layer):
 
 
 class PoolingLayer(tf.keras.layers.Layer):
-    def __init__(self, axis, pool_type='mean', name=None):
-        super(PoolingLayer, self).__init__(name=name)
+    def __init__(self, axis, pool_type='mean', **kwargs):
+        super(PoolingLayer, self).__init__(**kwargs)
         self.axis = axis
         self.type = pool_type
 
@@ -88,8 +88,8 @@ class PoolingLayer(tf.keras.layers.Layer):
 class EdgeConvolution(tf.keras.layers.Layer):
 
     def __init__(self, num_points, k, channels, with_bn: bool = True, 
-                 activation='relu', pooling='average', name=None):
-        super(EdgeConvolution, self).__init__(name=name)
+                 activation='relu', pooling='average', **kwargs):
+        super(EdgeConvolution, self).__init__(**kwargs)
         self.num_points = num_points
         self.k = k
         self.channels = channels
@@ -97,47 +97,64 @@ class EdgeConvolution(tf.keras.layers.Layer):
         self.activation = activation
         self.pooling = pooling
 
+        # Inisitalize the trainable layers
+        self.layers_conv = []
+        self.layers_bn = []
+        for idx, channel in enumerate(self.channels):
+            self.layers_conv.append(
+                tf.keras.layers.Conv2D(
+                    channel,
+                    kernel_size=(1, 1), 
+                    strides=1,
+                    use_bias = False if self.with_bn else True, 
+                    kernel_initializer='glorot_normal',
+                    name='%s/conv_%d' % (self.name, idx)
+                ))
+            self.layers_bn.append(
+                tf.keras.layers.BatchNormalization(
+                    name='%s/bn_%d' % (self.name, idx)
+                )
+            )
+        self.layer_shortcut = tf.keras.layers.Conv2D(
+            self.channels[-1],
+            kernel_size = (1, 1), 
+            strides = 1, 
+            use_bias = False if self.with_bn else True, 
+            kernel_initializer = 'glorot_normal', 
+            name='%s/sc_conv' % self.name
+        )
+        self.layers_bn.append(
+            tf.keras.layers.BatchNormalization(
+                name='%s/sc_bn' % self.name
+            )
+        )
+
+    def get_config(self):
+        return {
+            'num_points': self.num_points,
+            'k': self.k,
+            'channels': self.channels,
+            'with_bn': self.with_bn,
+            'activation': self.activation,
+            'pooling': self.pooling
+        }
 
     def call(self, inputs):
+
         points, features = inputs
         x = KNeighborSelect(self.k, self.num_points)([points, features])
 
         for idx, channel in enumerate(self.channels):
-            # Features after expanding is of shape (N, P, K, 2*C) and the convolution gets applied
-            # on a P * K sized image going from 2 * C input channels to the output channels
-            x = tf.keras.layers.Conv2D(
-                channel,
-                kernel_size=(1, 1), 
-                strides=1,
-                data_format='channels_last', 
-                use_bias = False if self.with_bn else True, 
-                kernel_initializer='glorot_normal',
-                name='%s/conv%d' % (self.name, idx)
-            )(x)
-            # Batch normalize and apply Activation
+            x = self.layers_conv[idx](x)
             if self.with_bn:
-                x = tf.keras.layers.BatchNormalization(name='%s/bn%d' % (self.name, idx))(x)
+                x = self.layers_bn[idx](x)
             if self.activation:
-                x = tf.keras.layers.Activation(self.activation, name='%s/act%d' % (self.name, idx))(x)
-
+                x = tf.keras.layers.Activation(self.activation, name='%s/act_%d' % (self.name, idx))(x)
             features = PoolingLayer(axis=2)(x) if self.pooling == 'max' else tf.reduce_mean(x, axis=2)  # (N, P, C')
 
-        # Shortcut - Important: It's a convolution to correct dimentions, not a straight addition
-        # Features after expanding is of shape (N, P, 1, C_0) and the convolution gets applied
-        # on a P * 1 sized image going to the output channels
-        shortcut = tf.keras.layers.Conv2D(
-            self.channels[-1],
-            kernel_size = (1, 1), 
-            strides = 1, 
-            data_format = 'channels_last',
-            use_bias = False if self.with_bn else True, 
-            kernel_initializer = 'glorot_normal', 
-            name='%s/sc_conv' % self.name
-        )(tf.expand_dims(features, axis=2))
-
-        # Batch normalize and apply Activation, output with Skip connection
+        shortcut = self.layer_shortcut(tf.expand_dims(features, axis=2))
         if self.with_bn:
-            shortcut = tf.keras.layers.BatchNormalization(name='%s/sc_bn' % self.name)(shortcut)
+            shortcut = self.layers_bn[-1](shortcut)
         shortcut = tf.squeeze(shortcut, axis=2)
         return tf.keras.layers.Activation(self.activation, name='%s/sc_act' % self.name)(
             shortcut + features) if self.activation else (shortcut + features)  # (N, P, C')

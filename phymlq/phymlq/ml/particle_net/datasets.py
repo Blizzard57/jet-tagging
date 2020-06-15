@@ -8,10 +8,15 @@ import awkward
 import uproot_methods
 
 
-class TopTaggingPreprocessor(object):
+class TopTaggingPreparer(object):
 
-    @staticmethod
-    def download_dataset(store_directory):
+    def __init__(self, dir='data'):
+        self.dir = dir
+        if not os.path.exists(self.dir):
+            os.mkdir(self.dir)
+        self.files = []
+
+    def download(self, download=(True, True, True)):
         """
         Downloads the Original Data Files from the Zenodo website
 
@@ -20,28 +25,32 @@ class TopTaggingPreprocessor(object):
         store_directory: str
             The directory to store all the downloaded files into
         """
-        urllib.request.urlretrieve(
-            'https://zenodo.org/record/2603256/files/train.h5?download=1',
-            os.path.join(store_directory, 'original_train.h5')
-        )
-        print('Downloaded train.h5')
-        urllib.request.urlretrieve(
-            'https://zenodo.org/record/2603256/files/val.h5?download=1',
-            os.path.join(store_directory, 'original_val.h5')
-        )
-        print('Downloaded val.h5')
-        urllib.request.urlretrieve(
-            'https://zenodo.org/record/2603256/files/test.h5?download=1',
-            os.path.join(store_directory, 'original_test.h5')
-        )
-        print('Downloaded test.h5')
+        download_train, download_val, download_test = download
+        if download_train:
+            urllib.request.urlretrieve(
+                'https://zenodo.org/record/2603256/files/train.h5?download=1',
+                os.path.join(self.dir, 'original_train.h5')
+            )
+            print('Downloaded train.h5')
+        if download_val:
+            urllib.request.urlretrieve(
+                'https://zenodo.org/record/2603256/files/val.h5?download=1',
+                os.path.join(self.dir, 'original_val.h5')
+            )
+            print('Downloaded val.h5')
+        if download_test:
+            urllib.request.urlretrieve(
+                'https://zenodo.org/record/2603256/files/test.h5?download=1',
+                os.path.join(self.dir, 'original_test.h5')
+            )
+            print('Downloaded test.h5')
 
     @staticmethod
     def _col_list(prefix, max_particles=200):
         return ['%s_%d'%(prefix, i) for i in range(max_particles)]
 
     @classmethod
-    def _transform_dataframe(cls, df):
+    def transform_dataframe(cls, df):
         """
         Takes a DataFrame and converts it into a Awkward array representation
         with features relevant to our model.
@@ -97,9 +106,10 @@ class TopTaggingPreprocessor(object):
         _jet_etasign[_jet_etasign==0] = 1
         v['part_etarel'] = (p4.eta - jet_p4.eta) * _jet_etasign
         v['part_phirel'] = p4.delta_phi(jet_p4)
+
+        return v
         
-    @classmethod
-    def _convert_datafiles(cls, source_dir, dest_dir, basename, chunksize=1000000):
+    def convert_datafiles(self, source_dir, dest_dir, basename, chunksize=1000000):
         """
         Converts the DataFrame into an Awkward array and performs the read-write
         operations for the same. Also performs Batching of the file into smaller
@@ -116,36 +126,36 @@ class TopTaggingPreprocessor(object):
         chunksize: int
             Number of rows per awkward file, None for all rows in 1 file
         """
-        frames = pd.read_hdf(source_dir, key='table', iterator=True, chunksize=100000)
+        frames = pd.read_hdf(source_dir, key='table', iterator=True, chunksize=chunksize)
         for idx, frame in enumerate(frames):
             if not os.path.exists(dest_dir):
                 os.makedirs(dest_dir)
             output = os.path.join(dest_dir, '%s_%d.awkd'%(basename, idx))
+            self.files.append(output)
             logging.info(output)
             if os.path.exists(output):
                 logging.warning('File already exist: Continuing.')
                 continue
-            awkward.save(output, cls._transform_dataframe(frame), mode='x')
+            awkward.save(output, self.transform_dataframe(frame), mode='x')
 
-    @classmethod
-    def prepare_dataset(cls, directory, chunksize=1000000):
-        cls.convert(os.path.join(directory, 'original_train.h5'), 
-                    dest_dir=directory,
-                    basename='train_file',
-                    chunksize=chunksize)
-        cls.convert(os.path.join(directory, 'original_val.h5'), 
-                    dest_dir=os.path.join(directory, 'converted'), 
-                    basename='val_file',
-                    chunksize=chunksize)
-        cls.convert(os.path.join(directory, 'original_test.h5'), 
-                    dest_dir=os.path.join(directory, 'converted'), 
-                    basename='test_file',
-                    chunksize=chunksize)
+    def prepare(self, chunksize=600000):
+        self.convert_datafiles(os.path.join(self.dir, 'original_train.h5'), 
+                               dest_dir=self.dir,
+                               basename='transformed_train',
+                               chunksize=chunksize)
+        self.convert_datafiles(os.path.join(self.dir, 'original_val.h5'), 
+                               dest_dir=self.dir, 
+                               basename='transformed_val',
+                               chunksize=chunksize)
+        self.convert_datafiles(os.path.join(self.dir, 'original_test.h5'), 
+                               dest_dir=self.dir, 
+                               basename='transformed_test',
+                               chunksize=chunksize)
 
 
 class TopTaggingDataset(object):
 
-    def __init__(self, filepath, value_cols = None, label_cols='label', pad_len=100, data_format='channel_first'):
+    def __init__(self, filepath, value_cols = None, label_cols='label', pad_len=100):
         self.filepath = filepath
         self.value_cols = value_cols if value_cols is not None else {
             'points': ['part_etarel', 'part_phirel'],
@@ -153,8 +163,7 @@ class TopTaggingDataset(object):
             'mask': ['part_pt_log']
         }
         self.label_cols, self.pad_len = label_cols, pad_len
-        assert data_format in ('channel_first', 'channel_last')
-        self.stack_axis = 1 if data_format=='channel_first' else -1
+        self.stack_axis = -1
         self._values, self._label = {}, None
         self._load()
 
@@ -223,7 +232,8 @@ class TopTaggingDataset(object):
 
     def shuffle(self, seed=None):
         # Get a random permutation
-        if seed is not None: np.random.seed(seed)
+        if seed is not None: 
+            np.random.seed(seed)
         shuffle_indices = np.random.permutation(self.__len__())
         # Reorder the table
         for k in self._values:

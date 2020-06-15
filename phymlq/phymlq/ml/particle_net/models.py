@@ -3,7 +3,7 @@ import tensorflow as tf
 from phymlq.ml.particle_net.layers import EdgeConvolution, PoolingLayer, MaskOut
 
 
-class ParticleNet():
+class ParticleNet(tf.keras.models.Model):
 
     def __init__(self, 
                  input_shapes={'points': (100, 2), 'features': (100, 4), 'mask': (100, 1)}, 
@@ -57,10 +57,41 @@ class ParticleNet():
 
         self.layer_output = self._make_model()
 
-        self.model = tf.keras.models.Model(
+        super(ParticleNet, self).__init__(
             inputs = [self.layer_points, self.layer_features, self.layer_mask], 
             outputs = [self.layer_output], 
-            name = 'ParticleNet'
+            name = model_type
+        )
+        self.compile(loss='categorical_crossentropy',
+                     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                     metrics=['accuracy'])
+
+
+    def fit_dataset(self, dataset, val_dataset=None, batch_size=None,
+                    checkpoint_file='checkpoints/best.h5', tensorboard_dir='logs/'):
+        batch_size = 1024 if 'lite' in self.name else 384
+        epochs = 30
+
+        def lr_schedule(epoch):
+            return 1e-3 if epoch <= 10 else 1e-4 if epoch <= 20 else 1e-5
+
+        dataset.shuffle()
+        self.fit(
+            dataset.X, dataset.y,
+            batch_size=batch_size,
+            epochs=10,
+            validation_data=(val_dataset.X, val_dataset.y),
+            shuffle=True,
+            callbacks=[
+                tf.keras.callbacks.ModelCheckpoint(
+                    checkpoint_file,
+                    monitor='val_loss', verbose=True, save_best_only=True,
+                    save_weights_only=False, mode='auto', save_freq='epoch'
+                ),
+                tf.keras.callbacks.LearningRateScheduler(lr_schedule),
+                tf.keras.callbacks.ProgbarLogger('steps'),
+                tf.keras.callbacks.TensorBoard(tensorboard_dir, histogram_freq=1)
+            ]
         )
 
     def _make_model(self):
@@ -91,7 +122,7 @@ class ParticleNet():
 
         with tf.name_scope('particle_net'):
 
-            fts = tf.keras.layers.BatchNormalization(name='features_batchnormalize')(self.layer_features)
+            fts = tf.keras.layers.BatchNormalization(name='bn_features')(self.layer_features)
 
             for layer_idx, layer_param in enumerate(self.settings['conv_params']):
                 K, channels = layer_param

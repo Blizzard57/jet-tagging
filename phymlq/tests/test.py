@@ -1,5 +1,6 @@
 import phymlq
 import numpy as np
+import tensorflow as tf
 
 dataset = {
     'points': np.random.random((25, 100, 2)), 
@@ -8,4 +9,5 @@ dataset = {
 }
 input_shapes = {k : dataset[k].shape[1:] for k in dataset}
 
-phymlq.ml.particle_net.models.ParticleNet(input_shapes, 2)
+model = phymlq.ml.particle_net.models.ParticleNet(input_shapes, 2)
+tf.keras.utils.plot_model(model, 'model.png')
