@@ -71,6 +71,8 @@ class ParticleNet(tf.keras.models.Model):
                     checkpoint_file='checkpoints/best.h5', tensorboard_dir='logs/'):
         batch_size = 1024 if 'lite' in self.name else 384
         epochs = 30
+        if val_dataset is not None:
+            val_dataset = (val_dataset.X, val_dataset.y)
 
         def lr_schedule(epoch):
             return 1e-3 if epoch <= 10 else 1e-4 if epoch <= 20 else 1e-5
@@ -80,7 +82,7 @@ class ParticleNet(tf.keras.models.Model):
             dataset.X, dataset.y,
             batch_size=batch_size,
             epochs=10,
-            validation_data=(val_dataset.X, val_dataset.y),
+            validation_data=val_dataset,
             shuffle=True,
             callbacks=[
                 tf.keras.callbacks.ModelCheckpoint(
