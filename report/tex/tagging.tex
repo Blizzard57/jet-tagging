@@ -1,0 +1,60 @@
+\section{Mixture Models for Jet Tagging}
+\label{sec:tagging}
+
+\subsection{Gaussian Mixture Models}
+
+As a first step we pick the boosted top tagging problem. From Figure \ref{fig:efp-histogram}, it is apparent that the jets are points N-dimentional space (here 1000 dimentional, we have limited to EFPs of degree <= 7) which originate from several multivariate distributions. The obvious choice to model this data is to fit a Bayesian Gaussian Mixture Model, each distribution being a multivariate Gaussian:
+\begin{equation}
+    f_{pdf}(X) = \frac{1}{\sqrt{(2\pi)^k \vert \Sigma \vert}} e^{-\frac{1}{2} (x - \mu)^T \Sigma^{-1} (x - \mu)}
+\end{equation}
+We train the model using Expectation Maximization algorithm.
+The performance of the algorithm is at par with that of LDA (89.2\% on the top tagging dataset).
+
+
+\subsection{Maxwellian Mixture Models}
+
+The performance of the GMM is marred by the fact that the distributions of EFPs are actually maxwellian. The skew of the distributions is high for the top quarks even at low degrees and increases as the degree of the EFP increases. Therefore it behooves us to model the data using the Maxwellian distribution, which follows.
+
+
+We model the multivariate form of the Maxwell-Boltzmann Distribution as follows ~\cite{maxwellian_multivariate}.
+\begin{equation}
+    f_{pdf}(X) = \frac{b^{1 + \frac{n}{2}} \vert B \vert^\frac{n}{2} \Gamma(\frac{n}{2})}{\pi^{\frac{n}{2}} \Gamma(1 + \frac{n}{2})} [XBX^T] e^{-b(XBX^T)}
+\end{equation}
+The parameters being learnt will be the $n \times n$ sized matrix $B$. $X$ is the input vector to the model of shape $n \times 1$ and the the constant $b$ is the determinant of the matrix $B$, which together with the Gamma functions serves the task of normalization.
+
+\textcolor{red}{This distribution will be trained on using the Expectation Maximization algorithm, details of the E- step and M- step will be added here, together with any improvements in performance. ~\cite{maxwellian_plasma}}
+
+
+\subsection{Performance of the Models}
+
+Following is the performance of the algorithms on the Top Tagging dataset \cite{data_toptagging}.
+\begin{table}
+    \caption{Performance on Top Tagging \cite{tagging_review}}
+    \label{tab:1}
+    \begin{tabular}{lll}
+        \hline\noalign{\smallskip}
+        Model Name                                           & Accuracy & ROC AUC \\
+        \noalign{\smallskip}\hline\noalign{\smallskip}
+        \textbf{Bayessian Maxwellian Mixture Model with EFP} & UNK      & UNK     \\
+        \textbf{Bayesian Gaussian Mixture Model with EFP}    & 89.224\% & UNK     \\
+        Latent Dirichlet Allocation                          & 89.2\%   & 0.955   \\
+        \noalign{\smallskip}\hline
+        Linear Discriminant Analysis with EFP                & 93.2\%   & 0.980   \\
+        ParticleNet (Graph Neural Net on Point Cloud)        & 93.8\%   & 0.985   \\
+        \noalign{\smallskip}\hline
+    \end{tabular}
+\end{table}
+
+\textcolor{red}{Add accuracy figures on the QCD tagging dataset \cite{data_qcdtagging}}
+
+\subsection{Features of probabilistic tagging}
+
+While boosted top tagging is solved to a very high accuracy, the following attributes are still sought for:
+\begin{itemize}
+    \item To know what confidence we have tagged a single jet with? - As seen from the histograms, some jets are very clearly in the Top or QCD domain, the overlap of the two is the set of jets where most algorithms fail. When tagging, a model should be able to output both the class label and the confidence figure.
+    \item Resilliance to unseen input, and ability to fail gracefully if the input jet is not unlike what the model has seen before? This may be due to errors by the clustering algorithm which has clustered multiple jets together or because of an unknown decay type.
+\end{itemize}
+A probabilistic Bayesian generative model is the best attempt at modelling the probability with which we are tagging a jet.
+
+\textcolor{red}{Show experimental proof that we are indeed resilliant against mutliple-jet in one jet image and against unknown jet types}.
+\textcolor{yellow}{We need to explore what set of features help models like ParticleNet \cite{particle_net} perform better in the overlap zone, and it's performance relative to our confidence, as in the Orange comparative scatters.}
