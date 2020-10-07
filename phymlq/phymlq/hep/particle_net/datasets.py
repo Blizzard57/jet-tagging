@@ -7,9 +7,10 @@ import pandas as pd
 import awkward
 import uproot_methods
 
+from collections import OrderedDict
+
 
 class TopTaggingPreparer(object):
-
     def __init__(self, dir='data'):
         self.dir = dir
         if not os.path.exists(self.dir):
@@ -29,25 +30,22 @@ class TopTaggingPreparer(object):
         if download_train:
             urllib.request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/train.h5?download=1',
-                os.path.join(self.dir, 'original_train.h5')
-            )
+                os.path.join(self.dir, 'original_train.h5'))
             print('Downloaded train.h5')
         if download_val:
             urllib.request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/val.h5?download=1',
-                os.path.join(self.dir, 'original_val.h5')
-            )
+                os.path.join(self.dir, 'original_val.h5'))
             print('Downloaded val.h5')
         if download_test:
             urllib.request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/test.h5?download=1',
-                os.path.join(self.dir, 'original_test.h5')
-            )
+                os.path.join(self.dir, 'original_test.h5'))
             print('Downloaded test.h5')
 
     @staticmethod
     def _col_list(prefix, max_particles=200):
-        return ['%s_%d'%(prefix, i) for i in range(max_particles)]
+        return ['%s_%d' % (prefix, i) for i in range(max_particles)]
 
     @classmethod
     def transform_dataframe(cls, df):
@@ -59,7 +57,7 @@ class TopTaggingPreparer(object):
         ----------
         df: Pandas DataFrame
             The DataFrame with all the momenta-energy coordinates for all the particles
-        
+
         Returns
         -------
         v: OrderedDict
@@ -70,10 +68,9 @@ class TopTaggingPreparer(object):
         Here the function is just computing 4 quantities of interest:
         * Eta value relative to the jet
         * Phi value relative to the jet
-        * Transverse Momentum of the Particle (log of it) 
-        * Energy of the Particle (log of it) 
+        * Transverse Momentum of the Particle (log of it)
+        * Energy of the Particle (log of it)
         """
-        from collections import OrderedDict
         v = OrderedDict()
 
         # We take the values in the dataframe for all particles of a single event in each row
@@ -91,25 +88,31 @@ class TopTaggingPreparer(object):
         pz = awkward.JaggedArray.fromcounts(n_particles, _pz[mask])
         energy = awkward.JaggedArray.fromcounts(n_particles, _en[mask])
 
-        p4 = uproot_methods.TLorentzVectorArray.from_cartesian(px, py, pz, energy)
+        p4 = uproot_methods.TLorentzVectorArray.from_cartesian(
+            px, py, pz, energy)
         jet_p4 = p4.sum()
 
         # Getting the Labels
-        _label = df['is_signal_new'].values # the target labels, QCD or Top
-        v['label'] = np.stack((_label, 1-_label), axis=-1) # Making it categorical [Top, QCD]
+        _label = df['is_signal_new'].values  # the target labels, QCD or Top
+        v['label'] = np.stack((_label, 1 - _label),
+                              axis=-1)  # Making it categorical [Top, QCD]
         # Transformed features relative to the Jet and log features
         v['part_pt_log'] = np.log(p4.pt)
         v['part_e_log'] = np.log(energy)
         # Flip particle ETA if Jet Eta is negative
         # Particle's phi relative to the Jet
         _jet_etasign = np.sign(jet_p4.eta)
-        _jet_etasign[_jet_etasign==0] = 1
+        _jet_etasign[_jet_etasign == 0] = 1
         v['part_etarel'] = (p4.eta - jet_p4.eta) * _jet_etasign
         v['part_phirel'] = p4.delta_phi(jet_p4)
 
         return v
-        
-    def convert_datafiles(self, source_dir, dest_dir, basename, chunksize=1000000):
+
+    def convert_datafiles(self,
+                          source_dir,
+                          dest_dir,
+                          basename,
+                          chunksize=1000000):
         """
         Converts the DataFrame into an Awkward array and performs the read-write
         operations for the same. Also performs Batching of the file into smaller
@@ -126,11 +129,14 @@ class TopTaggingPreparer(object):
         chunksize: int
             Number of rows per awkward file, None for all rows in 1 file
         """
-        frames = pd.read_hdf(source_dir, key='table', iterator=True, chunksize=chunksize)
+        frames = pd.read_hdf(source_dir,
+                             key='table',
+                             iterator=True,
+                             chunksize=chunksize)
         for idx, frame in enumerate(frames):
             if not os.path.exists(dest_dir):
                 os.makedirs(dest_dir)
-            output = os.path.join(dest_dir, '%s_%d.awkd'%(basename, idx))
+            output = os.path.join(dest_dir, '%s_%d.awkd' % (basename, idx))
             self.files.append(output)
             logging.info(output)
             if os.path.exists(output):
@@ -139,27 +145,31 @@ class TopTaggingPreparer(object):
             awkward.save(output, self.transform_dataframe(frame), mode='x')
 
     def prepare(self, chunksize=600000):
-        self.convert_datafiles(os.path.join(self.dir, 'original_train.h5'), 
+        self.convert_datafiles(os.path.join(self.dir, 'original_train.h5'),
                                dest_dir=self.dir,
                                basename='transformed_train',
                                chunksize=chunksize)
-        self.convert_datafiles(os.path.join(self.dir, 'original_val.h5'), 
-                               dest_dir=self.dir, 
+        self.convert_datafiles(os.path.join(self.dir, 'original_val.h5'),
+                               dest_dir=self.dir,
                                basename='transformed_val',
                                chunksize=chunksize)
-        self.convert_datafiles(os.path.join(self.dir, 'original_test.h5'), 
-                               dest_dir=self.dir, 
+        self.convert_datafiles(os.path.join(self.dir, 'original_test.h5'),
+                               dest_dir=self.dir,
                                basename='transformed_test',
                                chunksize=chunksize)
 
 
 class TopTaggingDataset(object):
-
-    def __init__(self, filepath, value_cols = None, label_cols='label', pad_len=100):
+    def __init__(self,
+                 filepath,
+                 value_cols=None,
+                 label_cols='label',
+                 pad_len=100):
         self.filepath = filepath
         self.value_cols = value_cols if value_cols is not None else {
             'points': ['part_etarel', 'part_phirel'],
-            'features': ['part_pt_log', 'part_e_log', 'part_etarel', 'part_phirel'],
+            'features':
+            ['part_pt_log', 'part_e_log', 'part_etarel', 'part_phirel'],
             'mask': ['part_pt_log']
         }
         self.label_cols, self.pad_len = label_cols, pad_len
@@ -188,7 +198,9 @@ class TopTaggingDataset(object):
         rectangular_array: np.array
             Padded version of the input Jagged Array
         """
-        rectangluar_array = np.full(shape=(len(jagged_array), max_len), fill_value=value, dtype=dtype)
+        rectangluar_array = np.full(shape=(len(jagged_array), max_len),
+                                    fill_value=value,
+                                    dtype=dtype)
         for idx, jagged_element in enumerate(jagged_array):
             if len(jagged_element) != 0:
                 trunc = jagged_element[:max_len].astype(dtype)
@@ -215,24 +227,23 @@ class TopTaggingDataset(object):
                 self._values[k] = np.stack(arrs, axis=self.stack_axis)
         logging.info('Finished loading file %s' % self.filepath)
 
-
     def __len__(self):
         return len(self._label)
 
     def __getitem__(self, key):
         return self._label if key == self.label_cols else self._values[key]
-    
+
     @property
     def X(self):
         return self._values
-    
+
     @property
     def y(self):
         return self._label
 
     def shuffle(self, seed=None):
         # Get a random permutation
-        if seed is not None: 
+        if seed is not None:
             np.random.seed(seed)
         shuffle_indices = np.random.permutation(self.__len__())
         # Reorder the table
