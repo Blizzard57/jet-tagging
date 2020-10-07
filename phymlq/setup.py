@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="phymlq",
-    version="v0.1.0",
+    version="v0.1.1",
     author="Animesh Sinha, Jai Bardhan, Kalp Shah",
     author_email="animesh.sinha@research.iiit.ac.in, jai.bardhan@research.iiit.ac.in, kalp.shah@research.iiit.ac.in",
     description="Helper Methods for several paper replications related to machine learning and quantum computation, physics oriented in particular.",

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from phymlq.ml.particle_net.layers import EdgeConvolution, PoolingLayer, MaskOut
+from phymlq.hep.particle_net.layers import EdgeConvolution, PoolingLayer, MaskOut
 
 
 class ParticleNet(tf.keras.models.Model):
