@@ -2,7 +2,7 @@ import phymlq
 import numpy as np
 import tensorflow as tf
 
-def test_particlenet_model(self):
+def test_particlenet_model():
     dataset = {
         'points': np.random.random((25, 100, 2)),
         'features': np.random.random((25, 100, 4)),
