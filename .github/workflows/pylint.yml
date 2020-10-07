@@ -19,4 +19,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint phymlq/phymlq --threshold 5
+        pylint phymlq/phymlq --fail-under=5
