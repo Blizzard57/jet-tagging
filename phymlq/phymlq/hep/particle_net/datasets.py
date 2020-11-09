@@ -1,6 +1,6 @@
 import logging
 import os
-import urllib
+from urllib import request
 
 import numpy as np
 import pandas as pd
@@ -11,8 +11,12 @@ from collections import OrderedDict
 
 
 class TopTaggingPreparer(object):
-    def __init__(self, dir='data'):
-        self.dir = dir
+    def __init__(self, store_dir='data'):
+        """
+        Constructor for Top Tagging dataset preparer
+        :param store_dir: str, The directory to store the files in
+        """
+        self.dir = store_dir
         if not os.path.exists(self.dir):
             os.mkdir(self.dir)
         self.files = []
@@ -20,28 +24,25 @@ class TopTaggingPreparer(object):
     def download(self, download=(True, True, True)):
         """
         Downloads the Original Data Files from the Zenodo website
-
-        Parameters
-        ----------
-        store_directory: str
-            The directory to store all the downloaded files into
+        :param download: tuple<bool>, whether to download (train, val, test)
         """
         download_train, download_val, download_test = download
         if download_train:
-            urllib.request.urlretrieve(
+            request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/train.h5?download=1',
                 os.path.join(self.dir, 'original_train.h5'))
             print('Downloaded train.h5')
         if download_val:
-            urllib.request.urlretrieve(
+            request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/val.h5?download=1',
                 os.path.join(self.dir, 'original_val.h5'))
             print('Downloaded val.h5')
         if download_test:
-            urllib.request.urlretrieve(
+            request.urlretrieve(
                 'https://zenodo.org/record/2603256/files/test.h5?download=1',
                 os.path.join(self.dir, 'original_test.h5'))
             print('Downloaded test.h5')
+        return self
 
     @staticmethod
     def _col_list(prefix, max_particles=200):
@@ -53,23 +54,15 @@ class TopTaggingPreparer(object):
         Takes a DataFrame and converts it into a Awkward array representation
         with features relevant to our model.
 
-        Parameters
-        ----------
-        df: Pandas DataFrame
-            The DataFrame with all the momenta-energy coordinates for all the particles
+        :param df: Pandas DataFrame, all the momenta-energy coordinates for all the particles
+        :returns v: OrderedDict, all properties of interest
 
-        Returns
-        -------
-        v: OrderedDict
-            A Ordered Dictionary with all properties of interest
-
-        Notes
-        -----
-        Here the function is just computing 4 quantities of interest:
-        * Eta value relative to the jet
-        * Phi value relative to the jet
-        * Transverse Momentum of the Particle (log of it)
-        * Energy of the Particle (log of it)
+        Notes:
+            Here the function is just computing 4 quantities of interest:
+            * Eta value relative to the jet
+            * Phi value relative to the jet
+            * Transverse Momentum of the Particle (log of it)
+            * Energy of the Particle (log of it)
         """
         v = OrderedDict()
 
@@ -112,7 +105,7 @@ class TopTaggingPreparer(object):
                           source_dir,
                           dest_dir,
                           basename,
-                          chunksize=1000000):
+                          chunk_size=1000000):
         """
         Converts the DataFrame into an Awkward array and performs the read-write
         operations for the same. Also performs Batching of the file into smaller
@@ -122,17 +115,17 @@ class TopTaggingPreparer(object):
         ----------
         source_dir: str
             The location to the H5 file with the dataframe
-        destdir_dir: str
+        dest_dir: str
             The location we need to write to
         basename: str
             Prefix for all the output file names
-        chunksize: int
+        chunk_size: int
             Number of rows per awkward file, None for all rows in 1 file
         """
         frames = pd.read_hdf(source_dir,
                              key='table',
                              iterator=True,
-                             chunksize=chunksize)
+                             chunksize=chunk_size)
         for idx, frame in enumerate(frames):
             if not os.path.exists(dest_dir):
                 os.makedirs(dest_dir)
@@ -144,19 +137,19 @@ class TopTaggingPreparer(object):
                 continue
             awkward.save(output, self.transform_dataframe(frame), mode='x')
 
-    def prepare(self, chunksize=600000):
+    def prepare(self, chunk_size=600000):
         self.convert_datafiles(os.path.join(self.dir, 'original_train.h5'),
                                dest_dir=self.dir,
                                basename='transformed_train',
-                               chunksize=chunksize)
+                               chunk_size=chunk_size)
         self.convert_datafiles(os.path.join(self.dir, 'original_val.h5'),
                                dest_dir=self.dir,
                                basename='transformed_val',
-                               chunksize=chunksize)
+                               chunk_size=chunk_size)
         self.convert_datafiles(os.path.join(self.dir, 'original_test.h5'),
                                dest_dir=self.dir,
                                basename='transformed_test',
-                               chunksize=chunksize)
+                               chunk_size=chunk_size)
 
 
 class TopTaggingDataset(object):
@@ -198,14 +191,14 @@ class TopTaggingDataset(object):
         rectangular_array: np.array
             Padded version of the input Jagged Array
         """
-        rectangluar_array = np.full(shape=(len(jagged_array), max_len),
+        rectangular_array = np.full(shape=(len(jagged_array), max_len),
                                     fill_value=value,
                                     dtype=dtype)
         for idx, jagged_element in enumerate(jagged_array):
             if len(jagged_element) != 0:
                 trunc = jagged_element[:max_len].astype(dtype)
-                rectangluar_array[idx, :len(trunc)] = trunc
-        return rectangluar_array
+                rectangular_array[idx, :len(trunc)] = trunc
+        return rectangular_array
 
     def _load(self):
         logging.info('Start loading file %s' % self.filepath)
