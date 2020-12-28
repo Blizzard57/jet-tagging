@@ -1,2 +1,2 @@
-# Particle Tagging
-A repository to maintain relevant research on particle tagging
+# pandas-ensembler
+A Python library to clean up Pandas code when stacking up models one after the other.

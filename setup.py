@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="phymlq",
+    name="random",
     version="v0.1.1",
     author="Animesh Sinha, Jai Bardhan, Kalp Shah",
     author_email="animesh.sinha@research.iiit.ac.in, jai.bardhan@research.iiit.ac.in, kalp.shah@research.iiit.ac.in",
