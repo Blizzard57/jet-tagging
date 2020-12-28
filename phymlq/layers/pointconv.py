@@ -122,7 +122,7 @@ class PointConv(torch_geometric.nn.MessagePassing):
         # ASSUMPTION: INDEX IS SORTED-> SO UNIQ AND INDEX ARE THE SAME
         assert torch.all(torch.eq(index, torch.sort(index)[0])) == 1
         size_new_points = [dim_size * k, int(list(new_points.size())[-1])]
-        integers = torch.arange(counts[0], device=DEVICE).view(-1, 1)
+        integers = torch.arange(counts[0], device=index.device).view(-1, 1)
 
         prev_i = counts[0]
         integers_dim = 0
@@ -130,20 +130,21 @@ class PointConv(torch_geometric.nn.MessagePassing):
             if i == prev_i:
                 integers_dim += 1
             else:
-                integers = torch.vstack((integers, torch.arange(prev_i, device=DEVICE)
+                integers = torch.vstack((integers, torch.arange(prev_i, device=index.device)
                                          .repeat(integers_dim, 1).view(-1, 1)))
                 prev_i = i
                 integers_dim = 1
-        integers = torch.vstack((integers, torch.arange(prev_i, device=DEVICE).repeat(integers_dim, 1).view(-1, 1)))
+        integers = torch.vstack((integers, torch.arange(prev_i, device=index.device)
+                                 .repeat(integers_dim, 1).view(-1, 1)))
         integers = integers.repeat(1, size_new_points[-1])
 
         index = torch_scatter.utils.broadcast(index, new_points, node_dim)
         idx_clone = (index * k + integers).clone()
-        out_new_points = torch.zeros(size_new_points, device=DEVICE).scatter_(node_dim, idx_clone, new_points).view(
-            [-1, k, size_new_points[-1]])
+        out_new_points = torch.zeros(size_new_points, device=index.device)\
+            .scatter_(node_dim, idx_clone, new_points).view([-1, k, size_new_points[-1]])
         size_weights = [dim_size * k, int(list(weights.size())[-1])]
-        out_weights = torch.zeros(size_weights, device=DEVICE).scatter_(node_dim, idx_clone[:, :size_weights[-1]],
-                                                                        weights).view([-1, k, size_weights[-1]])
+        out_weights = torch.zeros(size_weights, device=index.device).scatter_(
+            node_dim, idx_clone[:, :size_weights[-1]], weights).view([-1, k, size_weights[-1]])
         if density_scale is not None:
             out_new_points *= density_scale.view(-1, 1, 1)
         return out_new_points.permute(0, 2, 1).matmul(out_weights).view([dim_size, -1])

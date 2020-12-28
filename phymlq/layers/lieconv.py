@@ -239,12 +239,11 @@ class LieConv(PointConv):
 
         fps_count = 0
 
-        batch_fps_idx, batch_knn_idx, batch_knn_edges, batch_knn_abq_pairs, batch_vals = \
-            torch.tensor([]), torch.tensor([]), torch.tensor([]), torch.tensor([]), torch.tensor([])
+        batch_fps_idx, batch_knn_idx, batch_knn_edges, batch_knn_abq_pairs, batch_vals = None, None, None, None, None
 
         for i in range(batch_size):
-            pos_new = pos[ptr[i - 1]: ptr[i]]
-            x_new = x[ptr[i - 1]: ptr[i]]
+            pos_new = pos[ptr[i]: ptr[i + 1]]
+            x_new = x[ptr[i]: ptr[i + 1]]
 
             abq_pairs, vals = group.lift(pos_new.unsqueeze(0), x_new.unsqueeze(0), 1)
             abq_pairs = abq_pairs.squeeze(0).to(DEVICE)
@@ -253,16 +252,17 @@ class LieConv(PointConv):
             fps_idx = cls.fps(ratio, dists.clone()).to(DEVICE)  # Tensor of shape (ratio * n,)
             knn_edges, knn_abq_pairs = cls.knn(abq_pairs, fps_idx, k, dists)  # (ratio * n, k, lie_dims + 2 * q_dim)
 
-            fps_idx += ptr[i - 1]
+            fps_idx += ptr[i]
             knn_idx = (knn_edges[0] + fps_count).clone()
             fps_count += fps_idx.shape[0]
             knn_edges[0] = fps_idx[knn_edges[0]]
-            knn_edges[1] += ptr[i - 1]
+            knn_edges[1] += ptr[i]
 
-            batch_fps_idx = torch.hstack((batch_fps_idx, fps_idx))
-            batch_knn_idx = torch.hstack((batch_knn_idx, knn_idx))
-            batch_knn_edges = torch.hstack((batch_knn_edges, knn_edges))
-            batch_knn_abq_pairs = torch.vstack((batch_knn_abq_pairs, knn_abq_pairs))
-            batch_vals = torch.vstack((batch_vals, vals))
+            batch_fps_idx = torch.hstack((batch_fps_idx, fps_idx)) if batch_fps_idx is not None else fps_idx
+            batch_knn_idx = torch.hstack((batch_knn_idx, knn_idx)) if batch_knn_idx is not None else knn_idx
+            batch_knn_edges = torch.hstack((batch_knn_edges, knn_edges)) if batch_knn_edges is not None else knn_edges
+            batch_knn_abq_pairs = torch.vstack((batch_knn_abq_pairs, knn_abq_pairs)) \
+                if batch_knn_abq_pairs is not None else knn_abq_pairs
+            batch_vals = torch.vstack((batch_vals, vals)) if batch_vals is not None else vals
 
         return batch_fps_idx, batch_knn_idx, batch_knn_edges, batch_knn_abq_pairs, batch_vals

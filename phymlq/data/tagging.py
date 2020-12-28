@@ -120,12 +120,12 @@ class TopTaggingDataset(object):
 
 class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
 
-    directory = os.path.join(hyperparams.PROJECT_DIR, "scratch", "data", "top_tagging")
+    directory = os.path.join(hyperparams.PROJECT_DIR, "scratch", "data", "top_tagging", "graphs")
 
     def __init__(self, raw_filename):
         self.filename, self.dataset = raw_filename, None
-        os.makedirs(os.path.join(self.directory, "graphs"), exist_ok=True)
-        self.dataset = TopTaggingDataset(self.filename)
+        os.makedirs(self.directory, exist_ok=True)
+        self.dataset = TopTaggingDataset(self.filename + '.npz')
         super(TopTaggingGraphDataset, self).__init__(self.directory, None, None, None)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -150,7 +150,7 @@ class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
     def download(self):
-        raise NotImplementedError
+        pass
 
     @property
     def raw_file_names(self):
@@ -158,7 +158,7 @@ class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return [os.path.join(self.directory, "graphs", self.filename)]
+        return [self.filename]
 
     def get_loader(self):
         return torch_geometric.data.DataLoader(self, batch_size=128, shuffle=True)
