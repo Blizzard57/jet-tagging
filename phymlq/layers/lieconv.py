@@ -4,7 +4,7 @@ from torch import Tensor
 from torch_sparse import SparseTensor
 
 from phymlq.hyperparams import DEVICE
-from phymlq.layers.pointconv import PointConvSetAbstraction
+from phymlq.layers.pointconv import PointConv
 
 
 class LieGroup(abc.ABC):
@@ -164,11 +164,12 @@ class SO2Group(LieGroup):
         return self.alpha * angle_pairs.abs() + (1 - self.alpha) * (ra - rb).abs() / (ra + rb + 1e-3)
 
 
-class LieConv(PointConvSetAbstraction):
+class LieConv(PointConv):
 
-    def __init__(self, ratio, k, group, weight_net=None, local_nn=None, global_nn=None):
+    def __init__(self, ratio, k, group, weight_net=None, local_nn=None, global_nn=None, is_first=False):
         super(LieConv, self).__init__(ratio, k, weight_net=weight_net, local_nn=local_nn, global_nn=global_nn)
         self.group = group
+        self.is_first = is_first
 
     def forward(self, pos, x, batch):
         fps_idx, knn_idx, knn_edges, knn_abq_pairs, vals = self.process(pos, x, batch, self.ratio, self.k, self.group)
@@ -176,12 +177,13 @@ class LieConv(PointConvSetAbstraction):
                              fps_idx_shape=fps_idx.shape[0])
         if self.global_nn is not None:
             out = self.global_nn(out)
-
         return out, fps_idx
 
     # noinspection PyMethodOverriding
     def message(self, knn_abq_pairs, x_j):
         grouped_norm = knn_abq_pairs
+        if self.is_first:
+            x_j = x_j[:, :2]
         msg = torch.cat([grouped_norm.clone(), x_j], dim=1) if x_j is not None else grouped_norm
         if self.weight_net is not None:
             grouped_norm = self.weight_net(grouped_norm)

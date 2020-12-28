@@ -47,10 +47,10 @@ class DensityNet(torch_geometric.nn.MessagePassing):
         pass
 
 
-class PointConvSetAbstraction(torch_geometric.nn.MessagePassing):
+class PointConv(torch_geometric.nn.MessagePassing):
 
     def __init__(self, ratio, k, weight_net=None, local_nn=None, global_nn=None):
-        super(PointConvSetAbstraction, self).__init__(aggr=None, flow='target_to_source')
+        super(PointConv, self).__init__(aggr=None, flow='target_to_source')
         self.ratio = ratio
         self.k = k
         self.local_nn = local_nn
@@ -149,18 +149,18 @@ class PointConvSetAbstraction(torch_geometric.nn.MessagePassing):
         return out_new_points.permute(0, 2, 1).matmul(out_weights).view([dim_size, -1])
 
 
-class PointConvDensitySetAbstraction(PointConvSetAbstraction):
+class PointConvDensity(PointConv):
 
     def __init__(self, ratio, k, weight_net=None, local_nn=None, global_nn=None, density_nn=None, kernel_params=None):
-        super(PointConvDensitySetAbstraction, self).__init__(ratio, k, weight_net=weight_net, local_nn=local_nn,
-                                                             global_nn=global_nn)
+        super(PointConvDensity, self).__init__(ratio, k, weight_net=weight_net, local_nn=local_nn,
+                                               global_nn=global_nn)
         self.density_net = DensityNet(nn=density_nn, kernel_params=kernel_params)
 
     # noinspection PyMethodOverriding
     def aggregate(self, msg_output, knn_idx, pos, batch, fps_idx, fps_idx_shape):
         density_scale = self.density_net.forward(pos, batch, fps_idx)
-        return super(PointConvDensitySetAbstraction, self).aggregate(msg_output, knn_idx, fps_idx_shape,
-                                                                     density_scale=density_scale)
+        return super(PointConvDensity, self).aggregate(msg_output, knn_idx, fps_idx_shape,
+                                                       density_scale=density_scale)
 
     def message_and_aggregate(self, adj_t: SparseTensor) -> Tensor:
         raise NotImplementedError

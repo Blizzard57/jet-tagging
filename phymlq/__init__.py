@@ -6,3 +6,6 @@ import phymlq.data
 import phymlq.layers
 import phymlq.models
 import phymlq.utils
+
+import phymlq.trainer
+import phymlq.hyperparams

@@ -1,10 +1,11 @@
 awkward==0.13.0
 uproot-methods==0.7.4
 twine==3.2.0
-numpy
-pandas
+numpy~=1.17.2
+pandas~=0.25.1
 torch
 pytest
-tqdm
+tqdm~=4.36.1
 requests~=2.22.0
 setuptools~=41.4.0
+wandb

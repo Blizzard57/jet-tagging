@@ -16,17 +16,12 @@ class TopTaggingDataset(object):
     directory = os.path.join(hyperparams.PROJECT_DIR, 'data', 'top_tagging')
 
     def __init__(self, filename, n_particles=100):
-        self._download_files()
-        self._transform_datafiles('train')
-        self._transform_datafiles('val')
-        self._transform_datafiles('test')
-
         self.n_particles = n_particles
         self.filename = os.path.join(self.directory, filename)
         self.data = np.load(self.filename)
 
     @classmethod
-    def _download_files(cls):
+    def download_files(cls):
         """
         Downloads the Original Data Files from the Zenodo website
         """
@@ -37,6 +32,9 @@ class TopTaggingDataset(object):
                  os.path.join(cls.directory, '_original_val.h5'))
         download('https://zenodo.org/record/2603256/files/test.h5?download=1',
                  os.path.join(cls.directory, '_original_test.h5'))
+        cls._transform_datafiles('train')
+        cls._transform_datafiles('val')
+        cls._transform_datafiles('test')
 
     @classmethod
     def _transform_datafiles(cls, file, chunk_size=300, restrict_files=3):
@@ -71,12 +69,13 @@ class TopTaggingDataset(object):
             n_particles = np.sum(en > 0, axis=1)
             p4 = uproot_methods.TLorentzVectorArray(px, py, pz, en)
             jet_p4 = p4.sum()
+            mask = en > 0
 
             res = {
                 'label_top': df['is_signal_new'].values,
                 'label_qcd': 1 - df['is_signal_new'].values,
-                'part_pt_log': p4.pt,  # TODO: take log here
-                'part_e_log': en,  # TODO: take log here
+                'part_pt_log': np.log(p4.pt + mask),  # TODO: take log here
+                'part_e_log': np.log(en + mask),  # TODO: take log here
                 'part_eta_rel': (p4.eta - jet_p4.eta) * ((np.sign(jet_p4.eta) >= 0) * 2 - 1),
                 'part_phi_rel': p4.delta_phi(jet_p4),
                 'n_particles': n_particles,
@@ -121,10 +120,12 @@ class TopTaggingDataset(object):
 
 class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
 
-    directory = hyperparams.PROJECT_DIR
+    directory = os.path.join(hyperparams.PROJECT_DIR, "scratch", "data", "top_tagging")
 
     def __init__(self, raw_filename):
         self.filename, self.dataset = raw_filename, None
+        os.makedirs(os.path.join(self.directory, "graphs"), exist_ok=True)
+        self.dataset = TopTaggingDataset(self.filename)
         super(TopTaggingGraphDataset, self).__init__(self.directory, None, None, None)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -149,8 +150,7 @@ class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
     def download(self):
-        os.makedirs(self.directory, exist_ok=True)
-        self.dataset = TopTaggingDataset(self.filename)
+        raise NotImplementedError
 
     @property
     def raw_file_names(self):
@@ -158,4 +158,7 @@ class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ["data_1.pt"]
+        return [os.path.join(self.directory, "graphs", self.filename)]
+
+    def get_loader(self):
+        return torch_geometric.data.DataLoader(self, batch_size=128, shuffle=True)
