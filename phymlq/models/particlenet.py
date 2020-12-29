@@ -62,3 +62,20 @@ class ParticleNet(torch.nn.Module):
         x = self.output_mlp_linear(x)
         x = self.output_activation(x)
         return x
+
+
+class ParticleNetLite(ParticleNet):
+
+    def __init__(self):
+        settings = {
+            "conv_params": [
+                (7, (32, 32, 32)),
+                (7, (64, 64, 64)),
+            ],
+            "fc_params": [
+                (0.1, 128)
+            ],
+            "input_features": 4,
+            "output_classes": 2,
+        }
+        super().__init__(settings)

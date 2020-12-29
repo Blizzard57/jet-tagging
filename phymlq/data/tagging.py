@@ -31,19 +31,17 @@ class TopTaggingDataset:
                  os.path.join(cls.directory, '_original_val.h5'))
         download('https://zenodo.org/record/2603256/files/test.h5?download=1',
                  os.path.join(cls.directory, '_original_test.h5'))
-        cls.transform_datafiles('train')
-        cls.transform_datafiles('val')
-        cls.transform_datafiles('test')
 
     @classmethod
-    def transform_datafiles(cls, file, chunk_size=300, n_particles=200, restrict_files=3, force_rebuild=True):
+    def transform_files(cls, file, n_particles=200, start=None, stop=None, chunk_size=None, force_rebuild=True):
         """
         Converts DataFrame into Awkward array.
         Batches into smaller Awkward files.
         :param file: str, train, val or test; _original_file.h5 should be present in the directory
         :param chunk_size: int, Number of rows per awkward file, None for all rows in 1 file
         :param n_particles: int, Number of particles to keep in the jet
-        :param restrict_files: int, max number of files to create from a single dataframe iterator
+        :param start: int, start index in dataframe iterator
+        :param stop: int, stop index in dataframe iterator
         :param force_rebuild: bool, regenerate the files if they already exist
         """
         def generate_col_list_with_prefix(prefix, max_particles=n_particles):
@@ -52,12 +50,9 @@ class TopTaggingDataset:
         input_file = os.path.join(cls.directory, '_original_%s.h5' % file)
         output_basename = os.path.join(cls.directory, file)
 
-        frames = pd.read_hdf(input_file, key='table', iterator=True, chunksize=chunk_size)
+        frames = pd.read_hdf(input_file, key='table', start=start, stop=stop, iterator=True, chunksize=chunk_size)
         # noinspection PyTypeChecker
         for idx, df in enumerate(frames):
-            if restrict_files == idx:
-                del frames
-                break
             output_file = '%s_%d.npz' % (output_basename, idx + 1)
             if os.path.exists(output_file) and not force_rebuild:
                 logging.info('File %s already exists' % output_file)
