@@ -13,6 +13,7 @@ def train(model, criterion, optimizer, train_dataloader, val_dataloader, epochs=
         model.train()
         total_loss, total_samples, total_correct = 0, 0, 0
         train_iterator = tqdm.tqdm(train_dataloader)
+        train_iterator.set_description("Training Epoch %d" % (epoch + 1))
         for batch in train_iterator:
             optimizer.zero_grad()
 
@@ -42,6 +43,7 @@ def train(model, criterion, optimizer, train_dataloader, val_dataloader, epochs=
         with torch.no_grad():
             model.eval()
             val_iterator = tqdm.tqdm(val_dataloader)
+            val_iterator.set_description("Validation Epoch %d" % (epoch + 1))
             for batch in val_iterator:
                 batch = batch.to(DEVICE)
                 y = torch.tensor(batch.y).to(DEVICE)

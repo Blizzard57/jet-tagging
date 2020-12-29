@@ -1,37 +1,64 @@
 import torch
 import torch_geometric.nn
 
+from phymlq.layers.edgeconv import ParticleDynamicEdgeConv
+from phymlq.hyperparams import DEVICE
 
-class ParticleDynamicEdgeGATConv(torch.nn.Module):
-    def __init__(self, in_channels, out_channels: list, k=7):
-        super(ParticleDynamicEdgeGATConv, self).__init__()
 
-        self.k = k
+class ParticleNet(torch.nn.Module):
 
-        self.conv_list = torch.nn.ModuleList()
-        self.conv_list.append(torch_geometric.nn.GATConv(in_channels, int(out_channels[0] / 4), heads=4))
-        self.conv_list.append(torch_geometric.nn.GATConv(out_channels[0], int(out_channels[0] / 4), heads=4))
-        self.conv_list.append(torch_geometric.nn.GATConv(out_channels[1], int(out_channels[2] / 4), heads=4))
+    def __init__(self, settings=None):
+        super().__init__()
+        if settings is None:
+            settings = {
+                "conv_params": [
+                    (16, (64, 64, 64)),
+                    (16, (128, 128, 128)),
+                    (16, (256, 256, 256)),
+                ],
+                "fc_params": [
+                    (0.1, 256)
+                ],
+                "input_features": 4,
+                "output_classes": 2,
+            }
 
-        self.act_list = torch.nn.ModuleList()
-        self.act_list.append(torch.nn.ReLU())
-        self.act_list.append(torch.nn.ReLU())
-        self.act_list.append(torch.nn.ReLU())
+        previous_output_shape = settings['input_features']
+        self.input_bn = torch_geometric.nn.BatchNorm(settings['input_features'])
 
-        self.skip_mlp = torch.nn.Sequential(
-            torch.nn.Linear(in_channels, out_channels[2], bias=False),
-            torch_geometric.nn.BatchNorm(out_channels[2]),
-        )
-        self.act = torch.nn.ReLU()
+        self.conv_process = torch.nn.ModuleList()
+        for layer_idx, layer_param in enumerate(settings['conv_params']):
+            k, channels = layer_param
+            self.conv_process.append(ParticleDynamicEdgeConv(previous_output_shape, channels, k=k).to(DEVICE))
+            previous_output_shape = channels[-1]
 
-    def forward(self, pts, fts, batch=None):
-        edges = torch_geometric.nn.knn_graph(pts, self.k, batch, loop=False, flow="target_to_source")
+        self.fc_process = torch.nn.ModuleList()
+        for layer_idx, layer_param in enumerate(settings['fc_params']):
+            drop_rate, units = layer_param
+            # noinspection PyTypeChecker
+            seq = torch.nn.Sequential(
+                torch.nn.Linear(previous_output_shape, units),
+                torch.nn.Dropout(p=drop_rate),
+                torch.nn.ReLU()
+            ).to(DEVICE)
+            self.fc_process.append(seq)
+            previous_output_shape = units
 
-        x = fts
-        for idx, layer in enumerate(self.conv_list):
-            x = layer(x, edges)
-            x = self.act_list[idx](x)
+        self.output_mlp_linear = torch.nn.Linear(previous_output_shape, settings['output_classes'])
+        self.output_activation = torch.nn.Softmax(dim=1)
 
-        skip = self.skip_mlp(fts)
-        out = torch.add(x, skip)
-        return self.act(out)
+    def forward(self, batch):
+        fts = self.input_bn(batch.x)
+        pts = batch.pos
+
+        for idx, layer in enumerate(self.conv_process):
+            fts = layer(pts, fts, batch.batch)
+            pts = fts
+
+        x = torch_geometric.nn.global_mean_pool(fts, batch.batch)
+        for layer in self.fc_process:
+            x = layer(x)
+
+        x = self.output_mlp_linear(x)
+        x = self.output_activation(x)
+        return x

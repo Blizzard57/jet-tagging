@@ -11,12 +11,11 @@ from phymlq import hyperparams
 from phymlq.utils.download import download
 
 
-class TopTaggingDataset(object):
+class TopTaggingDataset:
 
     directory = os.path.join(hyperparams.PROJECT_DIR, 'data', 'top_tagging')
 
-    def __init__(self, filename, n_particles=100):
-        self.n_particles = n_particles
+    def __init__(self, filename):
         self.filename = os.path.join(self.directory, filename)
         self.data = np.load(self.filename)
 
@@ -32,20 +31,22 @@ class TopTaggingDataset(object):
                  os.path.join(cls.directory, '_original_val.h5'))
         download('https://zenodo.org/record/2603256/files/test.h5?download=1',
                  os.path.join(cls.directory, '_original_test.h5'))
-        cls._transform_datafiles('train')
-        cls._transform_datafiles('val')
-        cls._transform_datafiles('test')
+        cls.transform_datafiles('train')
+        cls.transform_datafiles('val')
+        cls.transform_datafiles('test')
 
     @classmethod
-    def _transform_datafiles(cls, file, chunk_size=300, restrict_files=3):
+    def transform_datafiles(cls, file, chunk_size=300, n_particles=200, restrict_files=3, force_rebuild=True):
         """
         Converts DataFrame into Awkward array.
         Batches into smaller Awkward files.
         :param file: str, train, val or test; _original_file.h5 should be present in the directory
         :param chunk_size: int, Number of rows per awkward file, None for all rows in 1 file
+        :param n_particles: int, Number of particles to keep in the jet
         :param restrict_files: int, max number of files to create from a single dataframe iterator
+        :param force_rebuild: bool, regenerate the files if they already exist
         """
-        def generate_col_list_with_prefix(prefix, max_particles=200):
+        def generate_col_list_with_prefix(prefix, max_particles=n_particles):
             return ['%s_%d' % (prefix, i) for i in range(max_particles)]
 
         input_file = os.path.join(cls.directory, '_original_%s.h5' % file)
@@ -58,7 +59,7 @@ class TopTaggingDataset(object):
                 del frames
                 break
             output_file = '%s_%d.npz' % (output_basename, idx + 1)
-            if os.path.exists(output_file):
+            if os.path.exists(output_file) and not force_rebuild:
                 logging.info('File %s already exists' % output_file)
                 continue
 
@@ -66,16 +67,16 @@ class TopTaggingDataset(object):
             py = df[generate_col_list_with_prefix('PY')].values
             pz = df[generate_col_list_with_prefix('PZ')].values
             en = df[generate_col_list_with_prefix('E')].values
-            n_particles = np.sum(en > 0, axis=1)
+            mask = en > 0
+            n_particles = np.sum(mask, axis=1)
             p4 = uproot_methods.TLorentzVectorArray(px, py, pz, en)
             jet_p4 = p4.sum()
-            mask = en > 0
 
             res = {
                 'label_top': df['is_signal_new'].values,
                 'label_qcd': 1 - df['is_signal_new'].values,
-                'part_pt_log': np.log(p4.pt + mask),  # TODO: take log here
-                'part_e_log': np.log(en + mask),  # TODO: take log here
+                'part_pt_log': np.log(p4.pt + 1 - mask),
+                'part_e_log': np.log(en + 1 - mask),
                 'part_eta_rel': (p4.eta - jet_p4.eta) * ((np.sign(jet_p4.eta) >= 0) * 2 - 1),
                 'part_phi_rel': p4.delta_phi(jet_p4),
                 'n_particles': n_particles,
@@ -120,7 +121,7 @@ class TopTaggingDataset(object):
 
 class TopTaggingGraphDataset(torch_geometric.data.InMemoryDataset):
 
-    directory = os.path.join(hyperparams.PROJECT_DIR, "scratch", "data", "top_tagging", "graphs")
+    directory = os.path.join(hyperparams.PROJECT_DIR, "data", "top_tagging", "graphs")
 
     def __init__(self, raw_filename):
         self.filename, self.dataset = raw_filename, None
